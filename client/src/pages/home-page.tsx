@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { LogOut, Send, Circle, Search, Moon, Sun, Trash2 } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
+import { Paperclip, X, Trash } from "lucide-react";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
@@ -33,7 +35,7 @@ export default function HomePage() {
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users", searchQuery],
     queryFn: async () => {
-      const url = searchQuery 
+      const url = searchQuery
         ? `/api/users/search?q=${encodeURIComponent(searchQuery)}`
         : "/api/users";
       const res = await fetch(url, { credentials: "include" });
@@ -84,9 +86,9 @@ export default function HomePage() {
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
                 if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
                   deleteAccountMutation.mutate();
@@ -179,13 +181,60 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
   });
 
   const messageMutation = useMutation({
-    mutationFn: async (data: { recipientId: string; content: string }) => {
+    mutationFn: async (data: { recipientId: string; content: string; fileUrl?: string; fileType?: string }) => {
       const res = await apiRequest("POST", "/api/messages", data);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser.id] });
       form.reset();
+    },
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/messages/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Failed to upload file');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      messageMutation.mutate({
+        recipientId: selectedUser.id,
+        content: data.fileName,
+        fileUrl: data.fileUrl,
+        fileType: data.fileType,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      await apiRequest("DELETE", `/api/messages/${messageId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser.id] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete message",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -223,13 +272,64 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
             >
               <Card
                 className={cn(
-                  "max-w-[70%] p-3",
+                  "max-w-[70%] p-3 relative group",
                   message.senderId === currentUser.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-accent"
                 )}
               >
-                {message.content}
+                {message.isDeleted ? (
+                  <span className="italic text-muted-foreground">This message was deleted</span>
+                ) : (
+                  <>
+                    {message.content}
+                    {message.fileUrl && (
+                      <div className="mt-2">
+                        {message.fileType?.startsWith('image/') ? (
+                          <Dialog>
+                            <DialogTrigger>
+                              <img
+                                src={message.fileUrl}
+                                alt={message.fileName}
+                                className="max-w-full h-auto rounded cursor-pointer"
+                              />
+                            </DialogTrigger>
+                            <DialogContent className="max-w-screen-lg">
+                              <img
+                                src={message.fileUrl}
+                                alt={message.fileName}
+                                className="max-w-full h-auto"
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        ) : (
+                          <a
+                            href={message.fileUrl}
+                            download={message.fileName}
+                            className="flex items-center gap-2 text-sm hover:underline"
+                          >
+                            <Paperclip className="h-4 w-4" />
+                            {message.fileName}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+                {message.senderId === currentUser.id && !message.isDeleted && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to delete this message?')) {
+                        deleteMessageMutation.mutate(message.id);
+                      }
+                    }}
+                  >
+                    <Trash className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
               </Card>
             </div>
           ))}
@@ -242,6 +342,25 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
             onSubmit={form.handleSubmit((data) => messageMutation.mutate(data))}
             className="flex gap-2"
           >
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadFileMutation.mutate(file);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="h-5 w-5" />
+            </Button>
             <FormField
               control={form.control}
               name="content"

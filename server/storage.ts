@@ -11,6 +11,7 @@ export interface IStorage {
   getAllUsers(): Promise<UserType[]>;
   setUserOnlineStatus(id: string, isOnline: boolean): Promise<void>;
   createMessage(message: Omit<MessageType, "id" | "timestamp">): Promise<MessageType>;
+  deleteMessage(messageId: string, userId: string): Promise<void>;
   getMessagesBetweenUsers(user1Id: string, user2Id: string): Promise<MessageType[]>;
   searchUsers(query: string): Promise<UserType[]>;
   sessionStore: session.Store;
@@ -60,7 +61,8 @@ export class MongoStorage implements IStorage {
   async createMessage(messageData: Omit<MessageType, "id" | "timestamp">): Promise<MessageType> {
     const message = await Message.create({
       ...messageData,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isDeleted: false
     });
     return this.transformMessage(message);
   }
@@ -92,6 +94,15 @@ export class MongoStorage implements IStorage {
     await User.findByIdAndDelete(id);
   }
 
+  async deleteMessage(messageId: string, userId: string): Promise<void> {
+    const message = await Message.findById(messageId);
+    if (!message || message.senderId.toString() !== userId) {
+      throw new Error("Unauthorized to delete this message");
+    }
+    message.isDeleted = true;
+    await message.save();
+  }
+
   private transformUser(user: any): UserType {
     return {
       id: user._id.toString(),
@@ -103,12 +114,29 @@ export class MongoStorage implements IStorage {
   }
 
   private transformMessage(message: any): MessageType {
+    if (message.isDeleted) {
+      return {
+        id: message._id.toString(),
+        senderId: message.senderId.toString(),
+        recipientId: message.recipientId.toString(),
+        content: "This message was deleted",
+        timestamp: message.timestamp,
+        isDeleted: true,
+        fileUrl: null,
+        fileName: null,
+        fileType: null
+      };
+    }
     return {
       id: message._id.toString(),
       senderId: message.senderId.toString(),
       recipientId: message.recipientId.toString(),
       content: message.content,
-      timestamp: message.timestamp
+      timestamp: message.timestamp,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType,
+      isDeleted: false
     };
   }
 }

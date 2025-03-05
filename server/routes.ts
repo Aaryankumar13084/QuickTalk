@@ -4,6 +4,28 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertMessageSchema } from "@shared/schema";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import express from "express"; // Added import for express.static
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: './uploads/',
+    filename: (req, file, cb) => {
+      cb(null, Date.now() + path.extname(file.originalname));
+    }
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Ensure uploads directory exists
+if (!fs.existsSync('./uploads')) {
+  fs.mkdirSync('./uploads');
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -74,6 +96,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await storage.setUserOnlineStatus(req.user!.id, false);
     res.sendStatus(200);
   });
+
+  app.post("/api/messages/upload", upload.single('file'), async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      fileUrl,
+      fileName: req.file.originalname,
+      fileType: req.file.mimetype
+    });
+  });
+
+  app.delete("/api/messages/:messageId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      await storage.deleteMessage(req.params.messageId, req.user!.id);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(403).json({ message: "Unauthorized to delete this message" });
+    }
+  });
+
+  // Serve uploaded files
+  app.use('/uploads', express.static('uploads'));
 
   const httpServer = createServer(app);
   return httpServer;

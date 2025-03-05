@@ -15,6 +15,10 @@ export const messages = pgTable("messages", {
   senderId: text("sender_id").notNull(),
   recipientId: text("recipient_id").notNull(),
   content: text("content").notNull(),
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  fileType: text("file_type"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 

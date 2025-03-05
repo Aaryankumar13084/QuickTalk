@@ -15,9 +15,25 @@ const messageSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  fileUrl: {
+    type: String,
+    required: false
+  },
+  fileName: {
+    type: String,
+    required: false
+  },
+  fileType: {
+    type: String,
+    required: false
+  },
   timestamp: { 
     type: Date, 
     default: Date.now 
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   }
 });
 
