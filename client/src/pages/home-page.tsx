@@ -12,25 +12,37 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle } from "lucide-react";
+import { LogOut, Send, Circle, Search } from "lucide-react";
+import { debounce } from "lodash";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    // Set online status when component mounts
     apiRequest("POST", "/api/online");
-    // Set offline status when component unmounts
     return () => {
       apiRequest("POST", "/api/offline");
     };
   }, []);
 
   const { data: users = [] } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users", searchQuery],
+    queryFn: async () => {
+      const url = searchQuery 
+        ? `/api/users/search?q=${encodeURIComponent(searchQuery)}`
+        : "/api/users";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch users");
+      return res.json();
+    },
     refetchInterval: 3000,
   });
+
+  const debouncedSearch = debounce((value: string) => {
+    setSearchQuery(value);
+  }, 300);
 
   return (
     <div className="flex h-screen bg-background">
@@ -47,6 +59,19 @@ export default function HomePage() {
             <LogOut className="h-5 w-5" />
           </Button>
         </div>
+
+        {/* Search Bar */}
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search users..."
+              onChange={(e) => debouncedSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         <ScrollArea className="flex-1">
           {users.map((u) => (
             <button

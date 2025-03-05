@@ -1,91 +1,105 @@
-import { type User, type Message } from "@shared/schema";
+import { type User as UserType, type Message as MessageType } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
-import { z } from "zod";
-
-const MemoryStore = createMemoryStore(session);
+import MongoStore from "connect-mongo";
+import { User, Message } from './db';
 
 export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: Omit<User, "id" | "isOnline" | "lastSeen">): Promise<User>;
-  getAllUsers(): Promise<User[]>;
-  setUserOnlineStatus(id: number, isOnline: boolean): Promise<void>;
-  createMessage(message: Omit<Message, "id" | "timestamp">): Promise<Message>;
-  getMessagesBetweenUsers(user1Id: number, user2Id: number): Promise<Message[]>;
+  getUser(id: string): Promise<UserType | undefined>;
+  getUserByUsername(username: string): Promise<UserType | undefined>;
+  createUser(user: Omit<UserType, "id" | "isOnline" | "lastSeen">): Promise<UserType>;
+  getAllUsers(): Promise<UserType[]>;
+  setUserOnlineStatus(id: string, isOnline: boolean): Promise<void>;
+  createMessage(message: Omit<MessageType, "id" | "timestamp">): Promise<MessageType>;
+  getMessagesBetweenUsers(user1Id: string, user2Id: string): Promise<MessageType[]>;
+  searchUsers(query: string): Promise<UserType[]>;
   sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private messages: Map<number, Message>;
-  private currentUserId: number;
-  private currentMessageId: number;
+export class MongoStorage implements IStorage {
   sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.messages = new Map();
-    this.currentUserId = 1;
-    this.currentMessageId = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+    this.sessionStore = MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI,
+      ttl: 24 * 60 * 60, // 1 day
     });
   }
 
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+  async getUser(id: string): Promise<UserType | undefined> {
+    const user = await User.findById(id);
+    return user ? this.transformUser(user) : undefined;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getUserByUsername(username: string): Promise<UserType | undefined> {
+    const user = await User.findOne({ username });
+    return user ? this.transformUser(user) : undefined;
   }
 
-  async createUser(insertUser: Omit<User, "id" | "isOnline" | "lastSeen">): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = {
-      ...insertUser,
-      id,
+  async createUser(userData: Omit<UserType, "id" | "isOnline" | "lastSeen">): Promise<UserType> {
+    const user = await User.create({
+      ...userData,
       isOnline: false,
-      lastSeen: new Date(),
+      lastSeen: new Date()
+    });
+    return this.transformUser(user);
+  }
+
+  async getAllUsers(): Promise<UserType[]> {
+    const users = await User.find();
+    return users.map(user => this.transformUser(user));
+  }
+
+  async setUserOnlineStatus(id: string, isOnline: boolean): Promise<void> {
+    await User.findByIdAndUpdate(id, {
+      isOnline,
+      lastSeen: new Date()
+    });
+  }
+
+  async createMessage(messageData: Omit<MessageType, "id" | "timestamp">): Promise<MessageType> {
+    const message = await Message.create({
+      ...messageData,
+      timestamp: new Date()
+    });
+    return this.transformMessage(message);
+  }
+
+  async getMessagesBetweenUsers(user1Id: string, user2Id: string): Promise<MessageType[]> {
+    const messages = await Message.find({
+      $or: [
+        { senderId: user1Id, recipientId: user2Id },
+        { senderId: user2Id, recipientId: user1Id }
+      ]
+    }).sort('timestamp');
+    return messages.map(msg => this.transformMessage(msg));
+  }
+
+  async searchUsers(query: string): Promise<UserType[]> {
+    const users = await User.find({
+      username: { $regex: query, $options: 'i' }
+    });
+    return users.map(user => this.transformUser(user));
+  }
+
+  private transformUser(user: any): UserType {
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      password: user.password,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen
     };
-    this.users.set(id, user);
-    return user;
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
-  }
-
-  async setUserOnlineStatus(id: number, isOnline: boolean): Promise<void> {
-    const user = this.users.get(id);
-    if (user) {
-      user.isOnline = isOnline;
-      user.lastSeen = new Date();
-      this.users.set(id, user);
-    }
-  }
-
-  async createMessage(insertMessage: Omit<Message, "id" | "timestamp">): Promise<Message> {
-    const id = this.currentMessageId++;
-    const message: Message = {
-      ...insertMessage,
-      id,
-      timestamp: new Date(),
+  private transformMessage(message: any): MessageType {
+    return {
+      id: message._id.toString(),
+      senderId: message.senderId.toString(),
+      recipientId: message.recipientId.toString(),
+      content: message.content,
+      timestamp: message.timestamp
     };
-    this.messages.set(id, message);
-    return message;
-  }
-
-  async getMessagesBetweenUsers(user1Id: number, user2Id: number): Promise<Message[]> {
-    return Array.from(this.messages.values()).filter(
-      (msg) =>
-        (msg.senderId === user1Id && msg.recipientId === user2Id) ||
-        (msg.senderId === user2Id && msg.recipientId === user1Id),
-    ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new MongoStorage();

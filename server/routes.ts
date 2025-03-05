@@ -14,10 +14,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(users.filter(u => u.id !== req.user!.id));
   });
 
+  app.get("/api/users/search", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const query = req.query.q as string;
+    if (!query) return res.json([]);
+
+    const users = await storage.searchUsers(query);
+    res.json(users.filter(u => u.id !== req.user!.id));
+  });
+
   app.get("/api/messages/:userId", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const userId = parseInt(req.params.userId);
-    if (isNaN(userId)) return res.sendStatus(400);
+    const userId = req.params.userId;
+    if (!userId) return res.sendStatus(400);
 
     const messages = await storage.getMessagesBetweenUsers(req.user!.id, userId);
     res.json(messages);
@@ -25,7 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/messages", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+
     try {
       const data = insertMessageSchema.parse(req.body);
       const message = await storage.createMessage({
