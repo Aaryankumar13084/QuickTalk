@@ -12,13 +12,16 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2 } from "lucide-react";
 import { debounce } from "lodash";
+import { useToast } from "@/hooks/use-toast";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDark, setIsDark] = useState(window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const { toast } = useToast();
 
   useEffect(() => {
     apiRequest("POST", "/api/online");
@@ -44,10 +47,32 @@ export default function HomePage() {
     setSearchQuery(value);
   }, 300);
 
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/user");
+    },
+    onSuccess: () => {
+      logoutMutation.mutate();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete account",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    document.documentElement.classList.toggle('dark', newTheme);
+  };
+
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col md:flex-row h-screen bg-background">
       {/* Sidebar */}
-      <div className="w-80 border-r flex flex-col">
+      <div className="w-full md:w-80 border-r flex flex-col">
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar>
@@ -55,9 +80,25 @@ export default function HomePage() {
             </Avatar>
             <span className="font-semibold">{user?.username}</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => logoutMutation.mutate()}>
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={toggleTheme}>
+              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => {
+                if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+                  deleteAccountMutation.mutate();
+                }
+              }}
+            >
+              <Trash2 className="h-5 w-5 text-destructive" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => logoutMutation.mutate()}>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Search Bar */}

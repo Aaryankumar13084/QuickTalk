@@ -23,6 +23,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(users.filter(u => u.id !== req.user!.id));
   });
 
+  app.delete("/api/user", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    await storage.deleteUser(req.user!.id);
+    req.logout((err) => {
+      if (err) {
+        res.status(500).json({ message: "Failed to logout after account deletion" });
+      } else {
+        res.sendStatus(200);
+      }
+    });
+  });
+
   app.get("/api/messages/:userId", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const userId = req.params.userId;

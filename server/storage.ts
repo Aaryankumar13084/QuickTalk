@@ -7,6 +7,7 @@ export interface IStorage {
   getUser(id: string): Promise<UserType | undefined>;
   getUserByUsername(username: string): Promise<UserType | undefined>;
   createUser(user: Omit<UserType, "id" | "isOnline" | "lastSeen">): Promise<UserType>;
+  deleteUser(id: string): Promise<void>;
   getAllUsers(): Promise<UserType[]>;
   setUserOnlineStatus(id: string, isOnline: boolean): Promise<void>;
   createMessage(message: Omit<MessageType, "id" | "timestamp">): Promise<MessageType>;
@@ -79,6 +80,16 @@ export class MongoStorage implements IStorage {
       username: { $regex: query, $options: 'i' }
     });
     return users.map(user => this.transformUser(user));
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await Message.deleteMany({
+      $or: [
+        { senderId: id },
+        { recipientId: id }
+      ]
+    });
+    await User.findByIdAndDelete(id);
   }
 
   private transformUser(user: any): UserType {
