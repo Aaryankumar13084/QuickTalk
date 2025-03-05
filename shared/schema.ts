@@ -3,7 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+  id: text("id").notNull().primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   isOnline: boolean("is_online").notNull().default(false),
@@ -11,9 +11,9 @@ export const users = pgTable("users", {
 });
 
 export const messages = pgTable("messages", {
-  id: serial("id").primaryKey(),
-  senderId: integer("sender_id").notNull(),
-  recipientId: integer("recipient_id").notNull(),
+  id: text("id").notNull().primaryKey(),
+  senderId: text("sender_id").notNull(),
+  recipientId: text("recipient_id").notNull(),
   content: text("content").notNull(),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });

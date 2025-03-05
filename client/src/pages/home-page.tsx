@@ -121,6 +121,11 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedUser.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/messages/${selectedUser.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch messages");
+      return res.json();
+    },
     refetchInterval: 3000,
   });
 
@@ -133,7 +138,7 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
   });
 
   const messageMutation = useMutation({
-    mutationFn: async (data: { recipientId: number; content: string }) => {
+    mutationFn: async (data: { recipientId: string; content: string }) => {
       const res = await apiRequest("POST", "/api/messages", data);
       return res.json();
     },
