@@ -5,6 +5,12 @@ import { connectDB } from "./db";
 import fs from 'fs'; //Import fs module for file system operations
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Get current file's path in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Load environment variables from .env file
 dotenv.config({ path: path.resolve(__dirname, '.env') });
