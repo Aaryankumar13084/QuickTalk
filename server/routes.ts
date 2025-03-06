@@ -27,11 +27,7 @@ if (!fs.existsSync('./uploads')) {
   fs.mkdirSync('./uploads');
 }
 
- // Health check endpoint
-  app.get("/health", (req, res) => {
-    res.status(200).json({ status: 'ok', message: 'Server is running' });
-  });
-
+ 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
