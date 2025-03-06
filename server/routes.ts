@@ -144,8 +144,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (err instanceof z.ZodError) {
         res.status(400).json(err.errors);
       } else {
+        console.error('Message creation error:', err);
         res.sendStatus(500);
       }
+    }
+  });
+
+  app.get("/api/messages/:userId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = req.params.userId;
+    if (!userId) return res.sendStatus(400);
+
+    try {
+      const messages = await storage.getMessagesBetweenUsers(req.user!.id, userId);
+      res.json(messages);
+    } catch (err) {
+      console.error('Message fetching error:', err);
+      res.status(500).json({ message: "Failed to fetch messages" });
     }
   });
 

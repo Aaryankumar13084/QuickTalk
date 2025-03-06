@@ -240,7 +240,8 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
 function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUser: User }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedUser.id],
@@ -251,6 +252,25 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
     },
     refetchInterval: 3000,
   });
+
+  const handleTouchStart = (messageId: string) => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    const timer = setTimeout(() => {
+      setSelectedMessageId(messageId);
+      if (window.confirm('Do you want to delete this message?')) {
+        deleteMessageMutation.mutate(messageId);
+      }
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setSelectedMessageId(null);
+  };
 
   const form = useForm({
     resolver: zodResolver(insertMessageSchema),
@@ -345,14 +365,6 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
             </div>
           </div>
         </div>
-        <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Info className="h-5 w-5" />
-            </Button>
-          </DialogTrigger>
-          <UserProfileDialog user={selectedUser} />
-        </Dialog>
       </div>
 
       <ScrollArea ref={scrollRef} className="flex-1 p-4">
@@ -366,11 +378,15 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
               )}
             >
               <Card
+                onTouchStart={() => message.senderId === currentUser.id && handleTouchStart(message.id)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchEnd}
                 className={cn(
-                  "max-w-[70%] p-3 relative group",
+                  "max-w-[70%] p-3 relative group touch-none",
                   message.senderId === currentUser.id
                     ? "bg-primary text-primary-foreground"
-                    : "bg-accent"
+                    : "bg-accent",
+                  selectedMessageId === message.id && "opacity-50"
                 )}
               >
                 {message.isDeleted ? (
@@ -415,7 +431,7 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity md:block hidden"
                     onClick={(e) => {
                       e.preventDefault();
                       if (window.confirm('Are you sure you want to delete this message?')) {
