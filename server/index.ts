@@ -3,6 +3,11 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { connectDB } from "./db";
 import fs from 'fs'; //Import fs module for file system operations
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment variables from .env file
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 if (!process.env.SESSION_SECRET) {
   process.env.SESSION_SECRET = Math.random().toString(36).substring(2);
