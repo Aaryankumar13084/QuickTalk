@@ -14,6 +14,7 @@ export interface IStorage {
   deleteMessage(messageId: string, userId: string): Promise<void>;
   getMessagesBetweenUsers(user1Id: string, user2Id: string): Promise<MessageType[]>;
   searchUsers(query: string): Promise<UserType[]>;
+  updateUser(id: string, updates: Partial<Omit<UserType, "id">>): Promise<UserType>;
   sessionStore: session.Store;
 }
 
@@ -101,6 +102,18 @@ export class MongoStorage implements IStorage {
     }
     message.isDeleted = true;
     await message.save();
+  }
+
+  async updateUser(id: string, updates: Partial<Omit<UserType, "id">>): Promise<UserType> {
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    );
+    if (!user) {
+      throw new Error("User not found");
+    }
+    return this.transformUser(user);
   }
 
   private transformUser(user: any): UserType {

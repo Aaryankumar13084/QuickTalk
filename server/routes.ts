@@ -120,6 +120,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/user", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      const { username, password } = req.body;
+
+      if (username) {
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser && existingUser.id !== req.user!.id) {
+          return res.status(400).send("Username already exists");
+        }
+      }
+
+      const user = await storage.updateUser(req.user!.id, {
+        ...req.body,
+        password: password ? await hashPassword(password) : undefined,
+      });
+
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));
 

@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { User, Message, insertMessageSchema } from "@shared/schema";
+import { User, Message, insertMessageSchema, insertUserSchema } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,14 +9,15 @@ import { Card } from "@/components/ui/card";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useRef, useState } from "react";
-import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { LogOut, Send, Circle, Search, Moon, Sun, Trash2 } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
-import { Paperclip, X, Trash } from "lucide-react";
+import { Paperclip, X, Trash, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { z } from "zod";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
@@ -80,7 +81,10 @@ export default function HomePage() {
             <Avatar>
               <AvatarFallback>{user?.username[0].toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="font-semibold">{user?.username}</span>
+            <div className="flex flex-col">
+              <span className="font-semibold">{user?.username}</span>
+              <ProfileDialog user={user!} />
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
@@ -162,6 +166,7 @@ export default function HomePage() {
 
 function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUser: User }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedUser.id],
     queryFn: async () => {
@@ -177,17 +182,6 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
     defaultValues: {
       recipientId: selectedUser.id,
       content: "",
-    },
-  });
-
-  const messageMutation = useMutation({
-    mutationFn: async (data: { recipientId: string; content: string; fileUrl?: string; fileType?: string }) => {
-      const res = await apiRequest("POST", "/api/messages", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser.id] });
-      form.reset();
     },
   });
 
@@ -219,6 +213,17 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  const messageMutation = useMutation({
+    mutationFn: async (data: { recipientId: string; content: string; fileUrl?: string; fileType?: string }) => {
+      const res = await apiRequest("POST", "/api/messages", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser.id] });
+      form.reset();
     },
   });
 
@@ -321,7 +326,8 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
                     variant="ghost"
                     size="icon"
                     className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       if (window.confirm('Are you sure you want to delete this message?')) {
                         deleteMessageMutation.mutate(message.id);
                       }
@@ -339,7 +345,13 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
       <div className="p-4 border-t">
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => messageMutation.mutate(data))}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const data = form.getValues();
+              if (data.content.trim()) {
+                messageMutation.mutate(data);
+              }
+            }}
             className="flex gap-2"
           >
             <input
@@ -347,6 +359,7 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
               ref={fileInputRef}
               className="hidden"
               onChange={(e) => {
+                e.preventDefault();
                 const file = e.target.files?.[0];
                 if (file) {
                   uploadFileMutation.mutate(file);
@@ -357,7 +370,10 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
               type="button"
               variant="ghost"
               size="icon"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={(e) => {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }}
             >
               <Paperclip className="h-5 w-5" />
             </Button>
@@ -379,5 +395,89 @@ function ChatArea({ selectedUser, currentUser }: { selectedUser: User; currentUs
         </Form>
       </div>
     </>
+  );
+}
+
+
+function ProfileDialog({ user }: { user: User }) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const form = useForm({
+    resolver: zodResolver(
+      insertUserSchema.extend({
+        password: z.string().min(1, "Password is required").optional(),
+      })
+    ),
+    defaultValues: {
+      username: user.username,
+      password: "",
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { username: string; password?: string }) => {
+      const res = await apiRequest("PATCH", "/api/user", data);
+      return res.json();
+    },
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData(["/api/user"], updatedUser);
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been updated successfully.",
+      });
+      setIsOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update profile",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full text-left px-2 py-1">
+          Edit Profile
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => updateProfileMutation.mutate(data))} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>New Password (optional)</FormLabel>
+                  <FormControl>
+                    <Input type="password" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <Button type="submit" className="w-full" disabled={updateProfileMutation.isPending}>
+              {updateProfileMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
