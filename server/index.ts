@@ -2,6 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { connectDB } from "./db";
+import fs from 'fs'; //Import fs module for file system operations
+
+if (!process.env.SESSION_SECRET) {
+  process.env.SESSION_SECRET = Math.random().toString(36).substring(2);
+  console.warn('No SESSION_SECRET provided, using a random value. This will invalidate existing sessions on restart.');
+}
 
 const app = express();
 app.use(express.json());
@@ -37,6 +43,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Ensure uploads directory exists
+if (!fs.existsSync('./uploads')) {
+  fs.mkdirSync('./uploads', { recursive: true });
+}
+
 (async () => {
   try {
     await connectDB();
@@ -56,7 +67,7 @@ app.use((req, res, next) => {
       serveStatic(app);
     }
 
-    const port = 5000;
+    const port = process.env.PORT || 5000;
     server.listen({
       port,
       host: "0.0.0.0",

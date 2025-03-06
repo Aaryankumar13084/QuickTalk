@@ -9,8 +9,28 @@ if (!process.env.MONGODB_URI) {
 
 export async function connectDB() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    const options = {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4,
+      retryWrites: true,
+    };
+
+    await mongoose.connect(process.env.MONGODB_URI, options);
     console.log('Connected to MongoDB');
+
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected. Attempting to reconnect...');
+    });
+
+    mongoose.connection.on('reconnected', () => {
+      console.log('MongoDB reconnected');
+    });
+
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error);
     process.exit(1);
