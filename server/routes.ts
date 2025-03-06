@@ -30,6 +30,12 @@ if (!fs.existsSync('./uploads')) {
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
+
+  // Health check endpoint
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Server is running' });
+  });
+
   app.get("/api/users", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const users = await storage.getAllUsers();
