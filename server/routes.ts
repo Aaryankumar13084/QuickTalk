@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertMessageSchema } from "@shared/schema";
+import { insertMessageSchema, insertGroupSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import express from "express"; // Added import for express.static
+import express from "express";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -57,13 +57,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get("/api/messages/:userId", async (req, res) => {
+  // Group related routes
+  app.post("/api/groups", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const userId = req.params.userId;
-    if (!userId) return res.sendStatus(400);
+    try {
+      const data = insertGroupSchema.parse(req.body);
+      const group = await storage.createGroup(
+        data.name,
+        req.user!.id,
+        req.body.memberIds || []
+      );
+      res.status(201).json(group);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json(err.errors);
+      } else {
+        res.status(500).json({ message: "Failed to create group" });
+      }
+    }
+  });
 
-    const messages = await storage.getMessagesBetweenUsers(req.user!.id, userId);
+  app.get("/api/groups", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const groups = await storage.getUserGroups(req.user!.id);
+    res.json(groups);
+  });
+
+  app.get("/api/groups/:groupId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const group = await storage.getGroup(req.params.groupId);
+    if (!group) return res.sendStatus(404);
+    res.json(group);
+  });
+
+  app.get("/api/groups/:groupId/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const messages = await storage.getGroupMessages(req.params.groupId);
     res.json(messages);
+  });
+
+  app.post("/api/groups/:groupId/members", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      await storage.addGroupMembers(req.params.groupId, req.body.memberIds);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to add members" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId/members/:memberId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      await storage.removeGroupMember(req.params.groupId, req.params.memberId);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to remove member" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      await storage.deleteGroup(req.params.groupId, req.user!.id);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(403).json({ message: "Unauthorized to delete this group" });
+    }
   });
 
   app.post("/api/messages", async (req, res) => {
@@ -74,6 +134,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = await storage.createMessage({
         ...data,
         senderId: req.user!.id,
+        fileUrl: null,
+        fileName: null,
+        fileType: null,
+        isDeleted: false
       });
       res.json(message);
     } catch (err) {
@@ -83,18 +147,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.sendStatus(500);
       }
     }
-  });
-
-  app.post("/api/online", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    await storage.setUserOnlineStatus(req.user!.id, true);
-    res.sendStatus(200);
-  });
-
-  app.post("/api/offline", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    await storage.setUserOnlineStatus(req.user!.id, false);
-    res.sendStatus(200);
   });
 
   app.post("/api/messages/upload", upload.single('file'), async (req, res) => {

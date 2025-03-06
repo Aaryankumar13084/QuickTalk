@@ -9,7 +9,12 @@ const messageSchema = new mongoose.Schema({
   recipientId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
-    required: true 
+    required: false 
+  },
+  groupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group',
+    required: false
   },
   content: { 
     type: String, 
@@ -34,6 +39,17 @@ const messageSchema = new mongoose.Schema({
   isDeleted: {
     type: Boolean,
     default: false
+  }
+});
+
+// Message must have either recipientId or groupId
+messageSchema.pre('save', function(next) {
+  if (!this.recipientId && !this.groupId) {
+    next(new Error('Message must have either a recipient or a group'));
+  } else if (this.recipientId && this.groupId) {
+    next(new Error('Message cannot have both recipient and group'));
+  } else {
+    next();
   }
 });
 

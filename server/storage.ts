@@ -1,7 +1,7 @@
-import { type User as UserType, type Message as MessageType } from "@shared/schema";
+import { type User as UserType, type Message as MessageType, type Group as GroupType } from "@shared/schema";
 import session from "express-session";
 import MongoStore from "connect-mongo";
-import { User, Message } from './db';
+import { User, Message, Group } from './db';
 
 export interface IStorage {
   getUser(id: string): Promise<UserType | undefined>;
@@ -15,6 +15,13 @@ export interface IStorage {
   getMessagesBetweenUsers(user1Id: string, user2Id: string): Promise<MessageType[]>;
   searchUsers(query: string): Promise<UserType[]>;
   updateUser(id: string, updates: Partial<Omit<UserType, "id">>): Promise<UserType>;
+  createGroup(name: string, adminId: string, memberIds: string[]): Promise<GroupType>;
+  getGroup(id: string): Promise<GroupType | undefined>;
+  getUserGroups(userId: string): Promise<GroupType[]>;
+  addGroupMembers(groupId: string, memberIds: string[]): Promise<void>;
+  removeGroupMember(groupId: string, memberId: string): Promise<void>;
+  getGroupMessages(groupId: string): Promise<MessageType[]>;
+  deleteGroup(groupId: string, userId: string): Promise<void>;
   sessionStore: session.Store;
 }
 
@@ -116,6 +123,51 @@ export class MongoStorage implements IStorage {
     return this.transformUser(user);
   }
 
+  async createGroup(name: string, adminId: string, memberIds: string[]): Promise<GroupType> {
+    const group = await Group.create({
+      name,
+      admin: adminId,
+      members: [...new Set([adminId, ...memberIds])]
+    });
+    return this.transformGroup(group);
+  }
+
+  async getGroup(id: string): Promise<GroupType | undefined> {
+    const group = await Group.findById(id).populate('members').populate('admin');
+    return group ? this.transformGroup(group) : undefined;
+  }
+
+  async getUserGroups(userId: string): Promise<GroupType[]> {
+    const groups = await Group.find({ members: userId }).populate('members').populate('admin');
+    return groups.map(group => this.transformGroup(group));
+  }
+
+  async addGroupMembers(groupId: string, memberIds: string[]): Promise<void> {
+    await Group.findByIdAndUpdate(groupId, {
+      $addToSet: { members: { $each: memberIds } }
+    });
+  }
+
+  async removeGroupMember(groupId: string, memberId: string): Promise<void> {
+    await Group.findByIdAndUpdate(groupId, {
+      $pull: { members: memberId }
+    });
+  }
+
+  async getGroupMessages(groupId: string): Promise<MessageType[]> {
+    const messages = await Message.find({ groupId }).sort('timestamp');
+    return messages.map(msg => this.transformMessage(msg));
+  }
+
+  async deleteGroup(groupId: string, userId: string): Promise<void> {
+    const group = await Group.findById(groupId);
+    if (!group || group.admin.toString() !== userId) {
+      throw new Error("Unauthorized to delete this group");
+    }
+    await Message.deleteMany({ groupId });
+    await Group.findByIdAndDelete(groupId);
+  }
+
   private transformUser(user: any): UserType {
     return {
       id: user._id.toString(),
@@ -131,7 +183,8 @@ export class MongoStorage implements IStorage {
       return {
         id: message._id.toString(),
         senderId: message.senderId.toString(),
-        recipientId: message.recipientId.toString(),
+        recipientId: message.recipientId?.toString(),
+        groupId: message.groupId?.toString(),
         content: "This message was deleted",
         timestamp: message.timestamp,
         isDeleted: true,
@@ -143,13 +196,24 @@ export class MongoStorage implements IStorage {
     return {
       id: message._id.toString(),
       senderId: message.senderId.toString(),
-      recipientId: message.recipientId.toString(),
+      recipientId: message.recipientId?.toString(),
+      groupId: message.groupId?.toString(),
       content: message.content,
       timestamp: message.timestamp,
       fileUrl: message.fileUrl,
       fileName: message.fileName,
       fileType: message.fileType,
       isDeleted: false
+    };
+  }
+
+  private transformGroup(group: any): GroupType {
+    return {
+      id: group._id.toString(),
+      name: group.name,
+      adminId: group.admin.toString(),
+      memberIds: group.members.map((m: any) => m._id.toString()),
+      createdAt: group.createdAt
     };
   }
 }

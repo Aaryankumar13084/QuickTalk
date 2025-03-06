@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { User } from './models/User';
 import { Message } from './models/Message';
+import { Group } from './models/Group';
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Please define the MONGODB_URI environment variable');
@@ -16,4 +17,4 @@ export async function connectDB() {
   }
 }
 
-export { User, Message };
+export { User, Message, Group };
