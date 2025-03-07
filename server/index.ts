@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables from .env file
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config();
 
 if (!process.env.SESSION_SECRET) {
   process.env.SESSION_SECRET = Math.random().toString(36).substring(2);
