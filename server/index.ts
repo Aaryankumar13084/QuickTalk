@@ -78,7 +78,7 @@ if (!fs.existsSync('./uploads')) {
       serveStatic(app);
     }
 
-    const port = process.env.PORT || 5000;
+    const port = process.env.PORT || 8080;
     server.listen({
       port,
       host: "0.0.0.0",
