@@ -29,7 +29,12 @@ if (!fs.existsSync('./uploads')) {
 
  
 export async function registerRoutes(app: Express): Promise<Server> {
-  setupAuth(app);
+   // Add healthcheck endpoint for Railway
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "healthy" });
+  });
+
+setupAuth(app);
 
 
   app.get("/api/users", async (req, res) => {
