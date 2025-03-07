@@ -24,7 +24,7 @@ export default function AuthPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Welcome to WhatsChat</CardTitle>
+            <CardTitle>Welcome to QuickTalk </CardTitle>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login">
