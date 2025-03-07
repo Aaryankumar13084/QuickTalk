@@ -15,7 +15,9 @@ const __dirname = dirname(__filename);
 // Load environment variables from .env file
 dotenv.config();
 
-if (!process.env.SESSION_SECRET) {
+const SESSION_SECRET="12c7937ce3c51408d47c25c1b482f309fb13eaa93721ba19fdb2e05fe80ec0f8" 
+
+if (!SESSION_SECRET) {
   process.env.SESSION_SECRET = Math.random().toString(36).substring(2);
   console.warn('No SESSION_SECRET provided, using a random value. This will invalidate existing sessions on restart.');
 }
