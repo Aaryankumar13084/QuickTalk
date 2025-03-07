@@ -28,7 +28,7 @@ export async function connectDB() {
       retryWrites: true,
     };
 
-    await mongoose.connect(process.env.MONGODB_URI, options);
+    await mongoose.connect(MONGODB_URI, options);
     console.log('Connected to MongoDB');
 
     mongoose.connection.on('error', (err) => {
