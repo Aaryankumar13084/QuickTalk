@@ -4,7 +4,7 @@ buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npm start"
-restartPolicyType = "on_failure"
+restartPolicyType = "always"
 
 [deploy.envs]
 NODE_ENV = "production"
